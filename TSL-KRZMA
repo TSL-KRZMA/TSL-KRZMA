@@ -1,48 +1,39 @@
 
---[[
-    TSL-KRZMA V3
-    Delta Mobile | No Key
-    Menu carre + raccourci mobile
-    Cercle de detection + alertes
-    FOV + Auto Dodge experimental
-]]
+-- TSL-KRZMA V4
+-- Detection du chasseur (experimentale)
+-- Interface mobile Delta
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local guiParent = player:WaitForChild("PlayerGui")
 local env = (getgenv and getgenv()) or _G
 
--- Supprimer les anciennes versions
-if env.TSLKRZMACleanup then
+if type(env.TSLKRZMACleanup) == "function" then
     pcall(env.TSLKRZMACleanup)
 end
 
-local oldGui = playerGui:FindFirstChild("TSL-KRZMA")
-if oldGui then
-    oldGui:Destroy()
-end
+local old = guiParent:FindFirstChild("TSL-KRZMA")
+if old then old:Destroy() end
 
 local oldZone = workspace:FindFirstChild("TSLKRZMA_Zone")
-if oldZone then
-    oldZone:Destroy()
-end
+if oldZone then oldZone:Destroy() end
 
-local connections = {}
 local running = true
 local enabled = false
 local showZone = true
-
 local radius = 10
 local cooldown = 1.5
+local fov = 70
 local lastDodge = 0
 local elapsed = 0
+local connections = {}
 
 local camera = workspace.CurrentCamera
 local originalFov = camera and camera.FieldOfView or 70
-local fov = originalFov
+fov = originalFov
 
 local function connect(signal, callback)
     local c = signal:Connect(callback)
@@ -50,27 +41,45 @@ local function connect(signal, callback)
     return c
 end
 
-local function round(obj, amount)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, amount)
-    corner.Parent = obj
+local function corner(obj, amount)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, amount)
+    c.Parent = obj
 end
 
-local function setFov(value)
-    fov = value
-    local cam = workspace.CurrentCamera
-    if cam then
-        cam.FieldOfView = fov
-    end
+local function label(parent, text, x, y, w, h, size)
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.fromOffset(w, h)
+    t.Position = UDim2.fromOffset(x, y)
+    t.BackgroundTransparency = 1
+    t.Text = text
+    t.TextColor3 = Color3.new(1, 1, 1)
+    t.TextSize = size or 14
+    t.Font = Enum.Font.GothamSemibold
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Parent = parent
+    return t
 end
 
--- INTERFACE
+local function button(parent, text, x, y, w, h, color)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.fromOffset(w, h)
+    b.Position = UDim2.fromOffset(x, y)
+    b.BackgroundColor3 = color
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.TextSize = 14
+    b.Font = Enum.Font.GothamBold
+    b.Parent = parent
+    corner(b, 7)
+    return b
+end
+
 local gui = Instance.new("ScreenGui")
 gui.Name = "TSL-KRZMA"
 gui.ResetOnSpawn = false
-gui.Parent = playerGui
+gui.Parent = guiParent
 
--- MENU CARRE
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromOffset(315, 315)
 frame.Position = UDim2.new(0.5, -157, 0.5, -157)
@@ -78,7 +87,7 @@ frame.BackgroundColor3 = Color3.fromRGB(18, 21, 32)
 frame.BorderSizePixel = 0
 frame.Active = true
 frame.Parent = gui
-round(frame, 12)
+corner(frame, 12)
 
 local stroke = Instance.new("UIStroke")
 stroke.Color = Color3.fromRGB(0, 155, 255)
@@ -91,68 +100,28 @@ titleBar.BackgroundTransparency = 1
 titleBar.Active = true
 titleBar.Parent = frame
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -90, 1, 0)
-title.Position = UDim2.fromOffset(12, 0)
-title.BackgroundTransparency = 1
-title.Text = "TSL-KRZMA V3"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.TextSize = 19
-title.Font = Enum.Font.GothamBold
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = titleBar
+label(titleBar, "TSL-KRZMA V4", 12, 8, 210, 28, 19)
 
-local function topButton(text, x, color)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.fromOffset(32, 30)
-    b.Position = UDim2.new(1, x, 0, 6)
-    b.BackgroundColor3 = color
-    b.Text = text
-    b.TextColor3 = Color3.new(1, 1, 1)
-    b.TextSize = 19
-    b.Font = Enum.Font.GothamBold
-    b.Parent = titleBar
-    round(b, 7)
-    return b
-end
-
-local minimize = topButton(
-    "-", -76, Color3.fromRGB(55, 105, 175)
+local minimize = button(
+    titleBar, "-", 239, 6, 32, 30,
+    Color3.fromRGB(55, 105, 175)
 )
 
-local close = topButton(
-    "X", -39, Color3.fromRGB(180, 50, 60)
+local close = button(
+    titleBar, "X", 276, 6, 32, 30,
+    Color3.fromRGB(180, 50, 60)
 )
 
-local function makeLabel(text, y, size)
-    local obj = Instance.new("TextLabel")
-    obj.Size = UDim2.new(1, -24, 0, 23)
-    obj.Position = UDim2.fromOffset(12, y)
-    obj.BackgroundTransparency = 1
-    obj.Text = text
-    obj.TextColor3 = Color3.new(1, 1, 1)
-    obj.Font = Enum.Font.GothamSemibold
-    obj.TextSize = size or 14
-    obj.TextXAlignment = Enum.TextXAlignment.Left
-    obj.Parent = frame
-    return obj
-end
-
-local function makeToggle(text, y, initial, callback)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.fromOffset(285, 32)
-    b.Position = UDim2.fromOffset(15, y)
-    b.TextColor3 = Color3.new(1, 1, 1)
-    b.TextSize = 14
-    b.Font = Enum.Font.GothamBold
-    b.Parent = frame
-    round(b, 7)
-
-    local active = initial
+local function toggle(text, y, initial, callback)
+    local state = initial
+    local b = button(
+        frame, "", 15, y, 285, 32,
+        Color3.fromRGB(165, 45, 55)
+    )
 
     local function refresh()
-        b.Text = text .. (active and " : ON" or " : OFF")
-        b.BackgroundColor3 = active
+        b.Text = text .. (state and " : ON" or " : OFF")
+        b.BackgroundColor3 = state
             and Color3.fromRGB(30, 155, 90)
             or Color3.fromRGB(165, 45, 55)
     end
@@ -160,36 +129,31 @@ local function makeToggle(text, y, initial, callback)
     refresh()
 
     connect(b.MouseButton1Click, function()
-        active = not active
+        state = not state
         refresh()
-        callback(active)
+        callback(state)
     end)
-
-    return b
 end
 
--- Curseur compatible tactile
-local function makeSlider(y, min, max, initial, callback)
-    local bar = Instance.new("TextButton")
-    bar.Size = UDim2.fromOffset(285, 14)
-    bar.Position = UDim2.fromOffset(15, y)
-    bar.BackgroundColor3 = Color3.fromRGB(65, 70, 85)
-    bar.Text = ""
+local function slider(y, min, max, initial, callback)
+    local bar = button(
+        frame, "", 15, y, 285, 14,
+        Color3.fromRGB(65, 70, 85)
+    )
     bar.AutoButtonColor = false
-    bar.Parent = frame
-    round(bar, 7)
 
     local fill = Instance.new("Frame")
     fill.Size = UDim2.new(
-        (initial-min)/(max-min), 0, 1, 0
+        math.clamp((initial - min) / (max - min), 0, 1),
+        0, 1, 0
     )
     fill.BackgroundColor3 = Color3.fromRGB(0, 160, 255)
     fill.BorderSizePixel = 0
     fill.Parent = bar
-    round(fill, 7)
+    corner(fill, 7)
 
-    local dragging = false
-    local activeTouch = nil
+    local activeInput = nil
+    local mouseDragging = false
 
     local function update(x)
         local ratio = math.clamp(
@@ -197,135 +161,114 @@ local function makeSlider(y, min, max, initial, callback)
             / math.max(bar.AbsoluteSize.X, 1),
             0, 1
         )
-
         fill.Size = UDim2.new(ratio, 0, 1, 0)
-        callback(min + (max-min)*ratio)
+        callback(min + (max - min) * ratio)
     end
 
     connect(bar.InputBegan, function(input)
-        if input.UserInputType ==
-            Enum.UserInputType.Touch then
-            activeTouch = input
-            dragging = true
+        if input.UserInputType == Enum.UserInputType.Touch then
+            activeInput = input
             update(input.Position.X)
-
-        elseif input.UserInputType ==
-            Enum.UserInputType.MouseButton1 then
-            dragging = true
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            mouseDragging = true
             update(input.Position.X)
         end
     end)
 
     connect(UIS.InputChanged, function(input)
-        if not dragging then return end
-
-        if input == activeTouch or (
-            not activeTouch and
-            input.UserInputType ==
-            Enum.UserInputType.MouseMovement
-        ) then
+        if activeInput and input == activeInput then
+            update(input.Position.X)
+        elseif mouseDragging and
+            input.UserInputType == Enum.UserInputType.MouseMovement then
             update(input.Position.X)
         end
     end)
 
     connect(UIS.InputEnded, function(input)
-        if input == activeTouch or (
-            not activeTouch and
-            input.UserInputType ==
-            Enum.UserInputType.MouseButton1
-        ) then
-            dragging = false
-            activeTouch = nil
+        if input == activeInput then
+            activeInput = nil
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            mouseDragging = false
         end
     end)
 end
 
--- OPTIONS
-makeToggle("AUTO DODGE", 48, false, function(state)
-    enabled = state
+toggle("AUTO DODGE", 48, false, function(v)
+    enabled = v
 end)
 
-makeToggle("CERCLE VISIBLE", 86, true, function(state)
-    showZone = state
+toggle("CERCLE VISIBLE", 86, true, function(v)
+    showZone = v
 end)
 
-local distanceLabel =
-    makeLabel("DISTANCE : 10 studs", 125)
+local distanceText = label(
+    frame, "DISTANCE : 10 studs", 12, 125, 285, 23
+)
 
-makeSlider(149, 3, 20, 10, function(value)
-    radius = math.floor(value + 0.5)
-    distanceLabel.Text =
-        "DISTANCE : " .. radius .. " studs"
+slider(149, 3, 20, 10, function(v)
+    radius = math.floor(v + 0.5)
+    distanceText.Text = "DISTANCE : " .. radius .. " studs"
 end)
 
-local cooldownLabel =
-    makeLabel("COOLDOWN : 1.5s", 169)
+local cooldownText = label(
+    frame, "COOLDOWN : 1.5s", 12, 169, 285, 23
+)
 
-makeSlider(193, 0.5, 5, 1.5, function(value)
-    cooldown = math.floor(value*10+0.5)/10
-    cooldownLabel.Text =
-        "COOLDOWN : " .. cooldown .. "s"
+slider(193, 0.5, 5, 1.5, function(v)
+    cooldown = math.floor(v * 10 + 0.5) / 10
+    cooldownText.Text = "COOLDOWN : " .. cooldown .. "s"
 end)
 
-local fovLabel =
-    makeLabel("FOV : " .. math.floor(fov), 212)
+local fovText = label(
+    frame, "FOV : " .. math.floor(fov), 12, 212, 285, 23
+)
 
-makeSlider(236, 70, 120, 70, function(value)
-    local newFov = math.floor(value + 0.5)
-    fovLabel.Text = "FOV : " .. newFov
-    setFov(newFov)
+slider(236, 70, 120, math.clamp(fov, 70, 120), function(v)
+    fov = math.floor(v + 0.5)
+    fovText.Text = "FOV : " .. fov
+    local cam = workspace.CurrentCamera
+    if cam then cam.FieldOfView = fov end
 end)
 
-local targetLabel =
-    makeLabel("JOUEUR : AUCUN", 260, 12)
+local targetText = label(
+    frame, "CHASSEUR : AUCUN", 12, 260, 285, 20, 12
+)
+targetText.TextColor3 = Color3.fromRGB(170, 195, 230)
 
-targetLabel.TextColor3 =
-    Color3.fromRGB(170, 195, 230)
+local statusText = label(
+    frame, "ZONE SECURISEE", 12, 282, 285, 20, 13
+)
+statusText.TextColor3 = Color3.fromRGB(80, 255, 150)
 
-local alertLabel =
-    makeLabel("ZONE SECURISEE", 282, 13)
-
-alertLabel.TextColor3 =
-    Color3.fromRGB(80, 255, 150)
-
--- RACCOURCI TSL
-local shortcut = Instance.new("TextButton")
-shortcut.Name = "TSLShortcut"
-shortcut.Size = UDim2.fromOffset(55, 55)
+local shortcut = button(
+    gui, "TSL", 0, 0, 55, 55,
+    Color3.fromRGB(15, 85, 165)
+)
 shortcut.Position = UDim2.new(0, 18, 0.45, 0)
-shortcut.BackgroundColor3 = Color3.fromRGB(15, 85, 165)
-shortcut.Text = "TSL"
-shortcut.TextColor3 = Color3.new(1, 1, 1)
 shortcut.TextSize = 18
-shortcut.Font = Enum.Font.GothamBold
 shortcut.Visible = false
 shortcut.Active = true
-shortcut.Parent = gui
-round(shortcut, 14)
+corner(shortcut, 14)
 
 local shortcutStroke = Instance.new("UIStroke")
 shortcutStroke.Color = Color3.fromRGB(0, 190, 255)
 shortcutStroke.Thickness = 2
 shortcutStroke.Parent = shortcut
 
--- DEPLACEMENT TACTILE
-local function makeDraggable(handle, object, onTap)
+local function draggable(handle, object, onTap)
     local dragging = false
-    local dragInput = nil
+    local inputStart = nil
     local startPos = nil
-    local startGuiPos = nil
+    local objectStart = nil
     local moved = false
 
     connect(handle.InputBegan, function(input)
-        if input.UserInputType ==
-            Enum.UserInputType.Touch or
-            input.UserInputType ==
-            Enum.UserInputType.MouseButton1 then
-
+        if input.UserInputType == Enum.UserInputType.Touch or
+            input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            dragInput = input
+            inputStart = input
             startPos = input.Position
-            startGuiPos = object.Position
+            objectStart = object.Position
             moved = false
         end
     end)
@@ -333,44 +276,37 @@ local function makeDraggable(handle, object, onTap)
     connect(UIS.InputChanged, function(input)
         if not dragging then return end
 
-        if input == dragInput or (
-            dragInput and
-            dragInput.UserInputType ==
-            Enum.UserInputType.MouseButton1 and
-            input.UserInputType ==
-            Enum.UserInputType.MouseMovement
-        ) then
-            local delta = input.Position - startPos
+        local valid = input == inputStart or (
+            inputStart and
+            inputStart.UserInputType == Enum.UserInputType.MouseButton1 and
+            input.UserInputType == Enum.UserInputType.MouseMovement
+        )
 
-            if delta.Magnitude > 8 then
-                moved = true
-            end
+        if valid then
+            local delta = input.Position - startPos
+            if delta.Magnitude > 8 then moved = true end
 
             object.Position = UDim2.new(
-                startGuiPos.X.Scale,
-                startGuiPos.X.Offset + delta.X,
-                startGuiPos.Y.Scale,
-                startGuiPos.Y.Offset + delta.Y
+                objectStart.X.Scale,
+                objectStart.X.Offset + delta.X,
+                objectStart.Y.Scale,
+                objectStart.Y.Offset + delta.Y
             )
         end
     end)
 
     connect(UIS.InputEnded, function(input)
-        if dragging and input == dragInput then
+        if dragging and input == inputStart then
             dragging = false
-
-            if not moved and onTap then
-                onTap()
-            end
-
-            dragInput = nil
+            if not moved and onTap then onTap() end
+            inputStart = nil
         end
     end)
 end
 
-makeDraggable(titleBar, frame)
+draggable(titleBar, frame)
 
-makeDraggable(shortcut, shortcut, function()
+draggable(shortcut, shortcut, function()
     frame.Visible = true
     shortcut.Visible = false
 end)
@@ -380,26 +316,25 @@ connect(minimize.MouseButton1Click, function()
     shortcut.Visible = true
 end)
 
--- ALERTE A L'ECRAN
+-- Petite alerte
 local warning = Instance.new("TextLabel")
-warning.Size = UDim2.fromOffset(270, 42)
-warning.Position = UDim2.new(0.5, -135, 0.12, 0)
-warning.BackgroundColor3 =
-    Color3.fromRGB(180, 35, 45)
-warning.BackgroundTransparency = 0.1
-warning.Text = "JOUEUR PROCHE !"
+warning.Size = UDim2.fromOffset(155, 28)
+warning.Position = UDim2.new(0.5, -77, 0.15, 0)
+warning.BackgroundColor3 = Color3.fromRGB(180, 35, 45)
+warning.BackgroundTransparency = 0.12
+warning.Text = "CHASSEUR PROCHE !"
 warning.TextColor3 = Color3.new(1, 1, 1)
-warning.TextSize = 16
+warning.TextSize = 12
 warning.Font = Enum.Font.GothamBold
 warning.Visible = false
 warning.Parent = gui
-round(warning, 9)
+corner(warning, 7)
 
--- CERCLE AU SOL
+-- Zone personnelle
 local zone = Instance.new("Part")
 zone.Name = "TSLKRZMA_Zone"
 zone.Shape = Enum.PartType.Cylinder
-zone.Size = Vector3.new(0.12, radius*2, radius*2)
+zone.Size = Vector3.new(0.12, radius * 2, radius * 2)
 zone.Anchored = true
 zone.CanCollide = false
 zone.CanTouch = false
@@ -409,15 +344,129 @@ zone.Color = Color3.fromRGB(0, 160, 255)
 zone.Transparency = 0.75
 zone.Parent = workspace
 
-local zoneOutline = Instance.new("SelectionBox")
-zoneOutline.Adornee = zone
-zoneOutline.LineThickness = 0.04
-zoneOutline.Color3 = Color3.fromRGB(0, 160, 255)
-zoneOutline.SurfaceTransparency = 1
-zoneOutline.Parent = zone
+local outline = Instance.new("SelectionBox")
+outline.Adornee = zone
+outline.LineThickness = 0.04
+outline.Color3 = Color3.fromRGB(0, 160, 255)
+outline.SurfaceTransparency = 1
+outline.Parent = zone
 
--- DETECTION DU JOUEUR LE PLUS PROCHE
-local function nearestPlayer()
+-- Identification du chasseur
+-- Cherche des attributs/valeurs de role et
+-- des indicateurs rouges proches du personnage.
+
+local hunterWords = {
+    "hunter", "killer", "chaser",
+    "chasseur", "tueur", "tagger"
+}
+
+local roleKeys = {
+    "Role", "CurrentRole", "PlayerRole",
+    "TeamRole", "IsHunter", "IsKiller",
+    "IsChaser", "Hunter", "Killer",
+    "Chasseur", "Tueur"
+}
+
+local function hunterValue(value)
+    if type(value) == "boolean" then
+        return value
+    end
+
+    if type(value) == "string" then
+        local lower = value:lower()
+        for _, word in ipairs(hunterWords) do
+            if lower:find(word, 1, true) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function roleMatches(instance)
+    for _, key in ipairs(roleKeys) do
+        local attr = instance:GetAttribute(key)
+        if hunterValue(attr) then
+            return true
+        end
+
+        local child = instance:FindFirstChild(key)
+        if child and child:IsA("ValueBase") then
+            if hunterValue(child.Value) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function redColor(color)
+    return color.R > 0.65
+        and color.R > color.G * 1.45
+        and color.R > color.B * 1.35
+end
+
+local function hasRedIndicator(char)
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("Highlight") then
+            if obj.Enabled and (
+                redColor(obj.FillColor) or
+                redColor(obj.OutlineColor)
+            ) then
+                return true
+            end
+
+        elseif obj:IsA("SelectionBox") or
+            obj:IsA("SelectionSphere") then
+            if redColor(obj.Color3) then
+                return true
+            end
+
+        elseif obj:IsA("BasePart") then
+            local name = obj.Name:lower()
+            local indicatorName =
+                name:find("circle", 1, true) or
+                name:find("ring", 1, true) or
+                name:find("aura", 1, true) or
+                name:find("zone", 1, true) or
+                name:find("radius", 1, true) or
+                name:find("cercle", 1, true)
+
+            if indicatorName and redColor(obj.Color) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function isHunter(other)
+    local char = other.Character
+    if not char then return false end
+
+    if roleMatches(other) or roleMatches(char) then
+        return true
+    end
+
+    if other.Team then
+        local teamName = other.Team.Name:lower()
+        for _, word in ipairs(hunterWords) do
+            if teamName:find(word, 1, true) then
+                return true
+            end
+        end
+    end
+
+    return hasRedIndicator(char)
+end
+
+local function nearestHunter()
     local char = player.Character
     local root = char and
         char:FindFirstChild("HumanoidRootPart")
@@ -430,17 +479,15 @@ local function nearestPlayer()
     for _, other in ipairs(Players:GetPlayers()) do
         if other ~= player then
             local otherChar = other.Character
-
             local otherRoot = otherChar and
                 otherChar:FindFirstChild("HumanoidRootPart")
-
             local hum = otherChar and
                 otherChar:FindFirstChildOfClass("Humanoid")
 
-            if otherRoot and hum and hum.Health > 0 then
-                local offset =
-                    otherRoot.Position - root.Position
+            if otherRoot and hum and hum.Health > 0
+                and isHunter(other) then
 
+                local offset = otherRoot.Position - root.Position
                 local distance = Vector3.new(
                     offset.X, 0, offset.Z
                 ).Magnitude
@@ -456,16 +503,12 @@ local function nearestPlayer()
     return nearest
 end
 
--- AUTO DODGE EXPERIMENTAL
 local function dodgeAway(target)
     local char = player.Character
-
     local root = char and
         char:FindFirstChild("HumanoidRootPart")
-
     local hum = char and
         char:FindFirstChildOfClass("Humanoid")
-
     local enemyRoot = target.Character and
         target.Character:FindFirstChild("HumanoidRootPart")
 
@@ -473,19 +516,12 @@ local function dodgeAway(target)
         return
     end
 
-    local offset =
-        root.Position - enemyRoot.Position
-
-    local direction = Vector3.new(
-        offset.X, 0, offset.Z
-    )
+    local offset = root.Position - enemyRoot.Position
+    local direction = Vector3.new(offset.X, 0, offset.Z)
 
     if direction.Magnitude < 0.01 then
-        local backward = -root.CFrame.LookVector
-
-        direction = Vector3.new(
-            backward.X, 0, backward.Z
-        )
+        local back = -root.CFrame.LookVector
+        direction = Vector3.new(back.X, 0, back.Z)
     end
 
     if direction.Magnitude > 0 then
@@ -493,9 +529,13 @@ local function dodgeAway(target)
     end
 end
 
--- BOUCLE PRINCIPALE
 connect(RunService.Heartbeat, function(dt)
     if not running then return end
+
+    local cam = workspace.CurrentCamera
+    if cam and math.abs(cam.FieldOfView - fov) > 0.1 then
+        cam.FieldOfView = fov
+    end
 
     local char = player.Character
     local root = char and
@@ -503,82 +543,55 @@ connect(RunService.Heartbeat, function(dt)
 
     if root then
         zone.Size = Vector3.new(
-            0.12, radius*2, radius*2
+            0.12, radius * 2, radius * 2
         )
+        zone.CFrame = CFrame.new(
+            root.Position.X,
+            root.Position.Y - 2.8,
+            root.Position.Z
+        ) * CFrame.Angles(0, 0, math.rad(90))
 
-        zone.CFrame =
-            CFrame.new(
-                root.Position.X,
-                root.Position.Y - 2.8,
-                root.Position.Z
-            ) * CFrame.Angles(0, 0, math.rad(90))
-
-        zone.Transparency =
-            showZone and 0.75 or 1
-
-        zoneOutline.Visible = showZone
+        zone.Transparency = showZone and 0.75 or 1
+        outline.Visible = showZone
     else
         zone.Transparency = 1
-        zoneOutline.Visible = false
+        outline.Visible = false
     end
 
     elapsed = elapsed + dt
     if elapsed < 0.1 then return end
     elapsed = 0
 
-    local target = nearestPlayer()
+    local target = nearestHunter()
 
     if target then
-        zone.Color =
-            Color3.fromRGB(255, 55, 65)
+        zone.Color = Color3.fromRGB(255, 55, 65)
+        outline.Color3 = Color3.fromRGB(255, 55, 65)
 
-        zoneOutline.Color3 =
-            Color3.fromRGB(255, 55, 65)
-
-        targetLabel.Text =
-            "JOUEUR : " .. target.Name
-
-        alertLabel.Text =
-            "ATTENTION : JOUEUR PROCHE"
-
-        alertLabel.TextColor3 =
-            Color3.fromRGB(255, 80, 80)
-
-        warning.Text =
-            "ALERTE : " .. target.Name
+        targetText.Text = "CHASSEUR : " .. target.Name
+        statusText.Text = "CHASSEUR DETECTE"
+        statusText.TextColor3 = Color3.fromRGB(255, 80, 80)
 
         warning.Visible = true
 
-        if enabled and
-            os.clock() - lastDodge >= cooldown then
-
+        if enabled and os.clock() - lastDodge >= cooldown then
             lastDodge = os.clock()
             dodgeAway(target)
         end
     else
-        zone.Color =
-            Color3.fromRGB(0, 160, 255)
+        zone.Color = Color3.fromRGB(0, 160, 255)
+        outline.Color3 = Color3.fromRGB(0, 160, 255)
 
-        zoneOutline.Color3 =
-            Color3.fromRGB(0, 160, 255)
-
-        targetLabel.Text =
-            "JOUEUR : AUCUN"
-
-        alertLabel.Text =
-            "ZONE SECURISEE"
-
-        alertLabel.TextColor3 =
-            Color3.fromRGB(80, 255, 150)
+        targetText.Text = "CHASSEUR : AUCUN"
+        statusText.Text = "ZONE SECURISEE"
+        statusText.TextColor3 = Color3.fromRGB(80, 255, 150)
 
         warning.Visible = false
     end
 end)
 
--- FERMETURE COMPLETE
 env.TSLKRZMACleanup = function()
     if not running then return end
-
     running = false
     enabled = false
 
@@ -599,4 +612,6 @@ connect(close.MouseButton1Click, function()
     env.TSLKRZMACleanup()
 end)
 
-setFov(fov)
+if workspace.CurrentCamera then
+    workspace.CurrentCamera.FieldOfView = fov
+end
